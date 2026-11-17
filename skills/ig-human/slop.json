@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "note": "Lexicon used by humanize.py and detect.py. Replacements are plain-English and keep the sentence grammatical. The last block of each list is Instagram-specific: caption and voiceover slop that does not show up on other platforms. Edit freely - it is meant to be yours.",
+  "note": "Lexicon used by humanize.py and detect.py. Replacements are plain-English and keep the sentence grammatical. The last block of each list is Instagram-specific: caption and voiceover slop that does not show up on other platforms. Edit freely - it is meant to be yours. Korean entries sit at the end of each list. They match with the particle still attached (게임체인저를), so a replacement has to end the same way the original does, with or without a final consonant, or the particle after it stops fitting.",
   "invisible": [
     {
       "cp": "U+200B",
@@ -630,6 +630,41 @@
       "find": "hack",
       "replace": "trick",
       "family": "nouns"
+    },
+    {
+      "find": "게임체인저",
+      "replace": "큰 변화",
+      "family": "nouns"
+    },
+    {
+      "find": "마인드셋",
+      "replace": "마음가짐",
+      "family": "nouns"
+    },
+    {
+      "find": "치트키",
+      "replace": "노하우",
+      "family": "nouns"
+    },
+    {
+      "find": "혁신적인",
+      "replace": "새로운",
+      "family": "adjectives"
+    },
+    {
+      "find": "획기적인",
+      "replace": "새로운",
+      "family": "adjectives"
+    },
+    {
+      "find": "결론적으로",
+      "replace": "결국",
+      "family": "connectives"
+    },
+    {
+      "find": "궁극적으로",
+      "replace": "결국",
+      "family": "connectives"
     }
   ],
   "phrases": [
@@ -922,6 +957,51 @@
       "find": "go viral overnight",
       "replace": "get reach",
       "family": "nouns"
+    },
+    {
+      "find": "한 단계 업그레이드",
+      "replace": "개선",
+      "family": "verbs"
+    },
+    {
+      "find": "오늘 영상에서는",
+      "replace": "",
+      "family": "openers"
+    },
+    {
+      "find": "이번 영상에서는",
+      "replace": "",
+      "family": "openers"
+    },
+    {
+      "find": "이 영상에서는",
+      "replace": "",
+      "family": "openers"
+    },
+    {
+      "find": "스크롤 멈추세요",
+      "replace": "",
+      "family": "openers"
+    },
+    {
+      "find": "스크롤을 멈추세요",
+      "replace": "",
+      "family": "openers"
+    },
+    {
+      "find": "팔로우하고 더 많은 꿀팁 받아가세요",
+      "replace": "",
+      "family": "closers"
+    },
+    {
+      "find": "필요한 친구를 태그해 주세요",
+      "replace": "",
+      "family": "closers"
+    },
+    {
+      "find": "필요한 친구에게 공유해 주세요",
+      "replace": "",
+      "family": "closers"
     }
   ],
   "structures": [
@@ -1019,6 +1099,30 @@
       "id": "follow-bait",
       "regex": "(?i)\\b(?:follow for more|tag someone who|double tap if|share this if|comment below if)\\b",
       "name": "Reflex follow or tag bait",
+      "fix": "Ask for the one action this post actually earns. The generic ask trains the audience to ignore every ask."
+    },
+    {
+      "id": "ko-not-just",
+      "regex": "(?:단순한|단순히|그냥|단지)\\s*[^.!?\\n]{1,40}?\\s*아니라",
+      "name": "\"단순한 X가 아니라 Y\" (Korean \"not just X, it's Y\")",
+      "fix": "Say the one thing you actually mean. Delete the setup half."
+    },
+    {
+      "id": "ko-stop-scroll",
+      "regex": "(?m)^\\s*(?:잠깐만?요?[,.!]?\\s*)?스크롤\\s*(?:을\\s*)?(?:멈|그만|내리지)",
+      "name": "\"스크롤 멈추세요\" opener",
+      "fix": "The scroll-stop has to be the claim itself. Asking for attention is the tell that you have not earned it."
+    },
+    {
+      "id": "ko-in-this-video",
+      "regex": "(?<![가-힣])(?:이|이번|오늘)\\s*(?:영상|릴스)\\s*에서|에\\s*대해\\s*(?:알아볼게요|알아보겠습니다|이야기해\\s*볼게요)",
+      "name": "Video preamble (\"이 영상에서는\", \"~에 대해 알아볼게요\")",
+      "fix": "Delete it and start at the payoff. The first two seconds decide the whole reel."
+    },
+    {
+      "id": "ko-follow-bait",
+      "regex": "팔로우하고\\s*더\\s*많은|필요한\\s*(?:친구|사람|분)(?:을|를|에게|한테)?\\s*(?:태그|공유)|공감(?:되면|하시면|하면)\\s*(?:좋아요|하트)",
+      "name": "Reflex follow or tag bait (Korean)",
       "fix": "Ask for the one action this post actually earns. The generic ask trains the audience to ignore every ask."
     }
   ]

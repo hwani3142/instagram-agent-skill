@@ -12,6 +12,8 @@ The timings are an estimate from word count at a words-per-minute rate. They
 are close enough to plan an edit and not a substitute for recording it. Set
 your own rate with --wpm once you have timed yourself reading a script out
 loud: most people land between 150 and 200, and the default here is 165.
+Korean is timed by the syllable instead, at --spm (default 300). A line that
+mixes the two pays for both.
 
 Usage
   python3 beats.py script.txt
@@ -28,7 +30,14 @@ import sys
 
 WORD_RE = re.compile(r"[A-Za-z0-9$%'’-]+")
 SENT_RE = re.compile(r"[^.!?]+[.!?]*")
-CONCRETE_RE = re.compile(r"\$\s?\d|\b\d[\d,.]*\b|(?<!^)\b[A-Z][a-z]{2,}\b", re.MULTILINE)
+SYLLABLE_RE = re.compile(r"[가-힣]")
+# Korean glues units and counters straight onto the number (27kg, 3가지, 5분),
+# so the word boundary the English pattern ends on never comes. These only
+# fire next to Hangul, which is what keeps English results where they were.
+KO_NUMBER = (r"(?<![\d.,])\d[\d,.]*(?=[A-Za-z%]{0,3}\s?[가-힣])"
+             r"|(?<=[가-힣])\d[\d,.]*|(?<=[가-힣]\s)\d[\d,.]*"
+             r"|(?<![가-힣])(?:두|세|다섯|여섯|일곱|여덟|아홉|열)\s?(?:가지|번|명|개|살|마리|달)")
+CONCRETE_RE = re.compile(r"\$\s?\d|" + KO_NUMBER + r"|\b\d[\d,.]*\b|(?<!^)\b[A-Z][a-z]{2,}\b", re.MULTILINE)
 STOPWORDS = {
     "the", "a", "an", "and", "or", "but", "if", "of", "to", "in", "on", "for",
     "with", "that", "this", "it", "is", "are", "was", "were", "be", "been",
@@ -47,6 +56,11 @@ def words(text):
     return WORD_RE.findall(re.sub(r"(?<=\d),(?=\d)", "", text))
 
 
+def seconds(text, wps, sps):
+    """English is timed by the word, Korean by the syllable. A mixed line pays both."""
+    return len(words(text)) / wps + len(SYLLABLE_RE.findall(text)) / sps
+
+
 def pretty(token):
     """Put the thousands separator back for display."""
     return re.sub(r"(\d)(?=(\d{3})+$)", r"\1,", token)
@@ -57,13 +71,13 @@ def tc(seconds):
     return f"{int(m)}:{s:04.1f}"
 
 
-def split_beats(raw, wps):
+def split_beats(raw, wps, sps):
     """One line is one beat, unless a line is too long to be one."""
     beats = []
     for line in [l.strip() for l in raw.splitlines()]:
         if not line:
             continue
-        if len(words(line)) / wps <= MAX_BEAT * 1.5:
+        if seconds(line, wps, sps) <= MAX_BEAT * 1.5:
             beats.append(line)
             continue
         # Long paragraph: break it at sentence ends so the timings mean
@@ -72,7 +86,7 @@ def split_beats(raw, wps):
         buf = ""
         for part in parts:
             candidate = (buf + " " + part).strip()
-            if buf and len(words(candidate)) / wps > MAX_BEAT:
+            if buf and seconds(candidate, wps, sps) > MAX_BEAT:
                 beats.append(buf)
                 buf = part
             else:
@@ -82,16 +96,20 @@ def split_beats(raw, wps):
     return beats
 
 
-def analyse(raw, wpm=165, target=None):
+def analyse(raw, wpm=165, target=None, spm=300):
     wps = wpm / 60.0
-    beats = split_beats(raw, wps)
+    sps = spm / 60.0
+    beats = split_beats(raw, wps, sps)
+    # A Korean script gets cut and padded in syllables, an English one in words.
+    ko = bool(SYLLABLE_RE.search(raw))
+    unit, rate = ("syllables", sps) if ko else ("words", wps)
     if not beats:
         return None
 
     rows, clock = [], 0.0
     for i, text in enumerate(beats):
         n = len(words(text))
-        dur = n / wps
+        dur = seconds(text, wps, sps)
         rows.append({
             "n": i + 1,
             "start": round(clock, 2),
@@ -119,7 +137,7 @@ def analyse(raw, wpm=165, target=None):
     if rows[0]["dur"] > HOOK_WINDOW:
         rows[0]["flags"].append(f"hook runs {rows[0]['dur']:.1f}s, past the {HOOK_WINDOW:.0f}s mark")
         notes.append(f"Beat 1 takes {rows[0]['dur']:.1f}s to say. Cut it to "
-                     f"{int(HOOK_WINDOW * wps)} words or fewer, or the hook lands after "
+                     f"{int(HOOK_WINDOW * rate)} {unit} or fewer, or the hook lands after "
                      "the decision has been made.")
     if rows[0]["concrete"] == 0:
         notes.append("Beat 1 has no number and no name in it. Hooks without something "
@@ -161,23 +179,31 @@ def analyse(raw, wpm=165, target=None):
         if abs(delta) <= target * 0.1:
             notes.append(f"Length is on target ({total:.1f}s against {target}s).")
         elif delta > 0:
-            notes.append(f"{delta:.1f}s over target. Cut about {int(delta * wps)} words.")
+            notes.append(f"{delta:.1f}s over target. Cut about {int(delta * rate)} {unit}.")
         else:
-            notes.append(f"{-delta:.1f}s under target. Either add {int(-delta * wps)} words "
+            notes.append(f"{-delta:.1f}s under target. Either add {int(-delta * rate)} {unit} "
                          "or shoot it short. Short is usually right.")
 
-    return {
+    out = {
         "wpm": wpm, "target": target,
         "total_seconds": round(total, 2),
         "total_words": sum(r["words"] for r in rows),
         "beats": rows,
         "notes": notes,
     }
+    if ko:
+        for r in rows:
+            r["syllables"] = len(SYLLABLE_RE.findall(r["text"]))
+        out["spm"] = spm
+        out["total_syllables"] = sum(r["syllables"] for r in rows)
+    return out
 
 
 def render(a, out=sys.stdout):
-    head = (f"BEAT SHEET  ·  {a['total_words']} words  ·  ~{a['total_seconds']:.1f}s "
-            f"at {a['wpm']} wpm" + (f"  ·  target {a['target']}s" if a["target"] else ""))
+    syl = a.get("total_syllables")
+    head = (f"BEAT SHEET  ·  {a['total_words']} words" + (f" + {syl} syllables" if syl else "")
+            + f"  ·  ~{a['total_seconds']:.1f}s at {a['wpm']} wpm" + (f" / {a['spm']} spm" if syl else "")
+            + (f"  ·  target {a['target']}s" if a["target"] else ""))
     print("\n" + head, file=out)
     print("=" * max(len(head), 72), file=out)
     for r in a["beats"]:
@@ -195,12 +221,14 @@ def main():
     ap = argparse.ArgumentParser(description="Time a Reel script into a beat sheet.")
     ap.add_argument("input", nargs="?", default="-", help="script file, or - for stdin")
     ap.add_argument("--wpm", type=float, default=165, help="speaking rate (default 165)")
+    ap.add_argument("--spm", type=float, default=300,
+                    help="Korean speaking rate, syllables per minute (default 300)")
     ap.add_argument("--target", type=float, help="target length in seconds")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
     raw = sys.stdin.read() if args.input == "-" else open(args.input, encoding="utf-8").read()
-    a = analyse(raw, wpm=args.wpm, target=args.target)
+    a = analyse(raw, wpm=args.wpm, target=args.target, spm=args.spm)
     if not a:
         print("empty script", file=sys.stderr)
         sys.exit(2)

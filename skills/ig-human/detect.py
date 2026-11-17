@@ -33,10 +33,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 LEX = os.path.join(HERE, "slop.json")
 
 SENT_RE = re.compile(r"[^.!?\n]+[.!?]*")
-WORD_RE = re.compile(r"[A-Za-z']+")
+WORD_RE = re.compile(r"[A-Za-z'가-힣ㄱ-ㆎ]+")
+HANGUL_RE = re.compile(r"[가-힣]")
 CONTRACTIONS = re.compile(r"\b\w+'(?:s|t|re|ve|ll|d|m)\b", re.IGNORECASE)
 PRONOUNS = re.compile(r"\b(i|me|my|mine|we|us|our|you|your)\b", re.IGNORECASE)
-NUMBERS = re.compile(r"\b\d[\d,.]*%?\b|\$\d")
+NUMBERS = re.compile(r"(?<![\d.,])\d[\d,.]*(?=[A-Za-z%]{0,3}\s?[가-힣])|(?<=[가-힣])\d[\d,.]*|(?<=[가-힣]\s)\d[\d,.]*"
+                     r"|\b\d[\d,.]*%?\b|\$\d")
 PROPER = re.compile(r"(?<![.!?]\s)(?<!^)\b[A-Z][a-z]{2,}\b", re.MULTILINE)
 
 
@@ -82,6 +84,18 @@ def check_specificity(text):
     return score, f"{hits} concrete markers, {density:.1f} per 100 words (want 4+)"
 
 
+def slop_pattern(entry):
+    """English entries match whole words. Korean glues particles onto the end
+    of a word (게임체인저를), so a Korean entry only needs its front edge clear,
+    unless it is deleted outright: then it has to end where the word ends, or
+    the leftover ending (멈춰요 -> 요) would be stranded in the sentence."""
+    find = entry["find"]
+    if not HANGUL_RE.search(find):
+        return re.compile(r"\b" + re.escape(find).replace(r"\ ", r"\s+") + r"\b", re.IGNORECASE)
+    tail = r"(?![가-힣])" if not entry["replace"] else ""
+    return re.compile(r"(?<![가-힣])" + re.escape(find).replace(r"\ ", r"\s*") + tail, re.IGNORECASE)
+
+
 def check_slop(text, lex):
     """Stock vocabulary density against the lexicon."""
     w = words(text)
@@ -89,9 +103,7 @@ def check_slop(text, lex):
         return 50.0, "empty"
     hits, found = 0, []
     for entry in lex["words"] + lex["phrases"]:
-        pattern = re.compile(r"\b" + re.escape(entry["find"]).replace(r"\ ", r"\s+") + r"\b",
-                             re.IGNORECASE)
-        n = len(pattern.findall(text))
+        n = len(slop_pattern(entry).findall(text))
         if n:
             hits += n
             found.append(entry["find"])
@@ -126,6 +138,9 @@ def check_voice(text, lex):
     per100 = 100 / len(w)
     contractions = len(CONTRACTIONS.findall(text)) * per100
     person = len(PRONOUNS.findall(text)) * per100
+    # Korean has no apostrophe contractions and drops pronouns as a matter of
+    # course, so neither count says anything about it. Score them as unknown.
+    ko = sum(1 for x in w if HANGUL_RE.search(x)) * 2 > len(w)
     tells = 0
     names = []
     for s in lex["structures"]:
@@ -138,14 +153,16 @@ def check_voice(text, lex):
             names.append(s["id"])
     bullets = [len(b.split()) for b in re.findall(r"(?m)^\s*[-*•]\s+(.+)$", text)]
     uniform = (len(bullets) >= 3 and statistics.pstdev(bullets) < 1.6)
-    score = (scale(contractions, human=3.0, machine=0.0) * 0.35
-             + scale(person, human=8.0, machine=1.0) * 0.35
+    score = ((50.0 if ko else scale(contractions, human=3.0, machine=0.0)) * 0.35
+             + (50.0 if ko else scale(person, human=8.0, machine=1.0)) * 0.35
              + clamp(100 - tells * 22) * 0.30)
     if uniform:
         score -= 12
         names.append("uniform-bullets")
     detail = (f"{contractions:.1f} contractions, {person:.1f} personal pronouns "
               f"per 100 words, {tells} structural tell(s)")
+    if ko:
+        detail = f"contractions and pronouns not scored for Korean, {tells} structural tell(s)"
     if names:
         detail += " [" + ", ".join(names[:4]) + "]"
     return clamp(score), detail

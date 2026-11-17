@@ -36,7 +36,7 @@ import re
 import statistics
 import sys
 
-WORD_RE = re.compile(r"[A-Za-z0-9$%'’-]+")
+WORD_RE = re.compile(r"[A-Za-z0-9$%'’가-힣ㄱ-ㆎ-]+")
 NUMBER_RE = re.compile(
     r"\$\s?\d[\d,]*(?:\.\d+)?"                       # money, whole
     r"|\b\d[\d,]*(?:\.\d+)?\s?"                      # a figure, with or
@@ -56,6 +56,7 @@ SPOKEN_NUMBERS = {
     "ten", "eleven", "twelve", "fifteen", "twenty", "thirty", "forty", "fifty",
     "sixty", "seventy", "eighty", "ninety", "hundred", "thousand", "million",
     "billion", "dozen", "half", "twice", "triple",
+    "두", "세", "다섯", "여섯", "일곱", "여덟", "아홉", "절반",
 }
 MONEY_WORDS = {
     "dollars", "dollar", "bucks", "grand", "percent", "cents",
@@ -78,6 +79,15 @@ STAKES = {
     "still", "already", "only", "without", "versus", "vs", "actually",
 }
 
+# Korean stakes words. Particles and endings attach to the stem (실수를,
+# 몰랐어요), so these match the start of a word rather than the whole word.
+# 않 and 없 match anywhere: every word they appear in is a negation.
+KO_STAKES_RE = re.compile(
+    r"(?<![가-힣])(?:절대|아무도|실수|실패|망했|망친|손해|후회|포기|그만두|멈춰|멈추"
+    r"|위험|경고|금지|최악|비밀|몰랐|진실|거짓말|사기|낭비|문제|하지만|대신"
+    r"|아직|이미|벌써|무료|공짜|처음)"
+    r"|(?<![가-힣])(?:안|못)(?![가-힣])|않|없")
+
 # Openers that spend the first second saying nothing.
 WEAK_OPENERS = [
     "so", "ok", "okay", "hey", "hi", "hello", "guys", "yo", "alright",
@@ -86,6 +96,8 @@ WEAK_OPENERS = [
     "have you", "did you", "do you", "are you", "in this", "in today",
     "the thing", "a lot", "there is", "there are", "this is", "it is",
     "as a", "when it", "if you've", "you know",
+    "안녕", "여러분", "오늘", "그래서", "솔직히", "그냥", "혹시", "사실",
+    "이번 영상", "이 영상",
 ]
 
 # Imperatives that earn the front position.
@@ -95,12 +107,18 @@ IMPERATIVES = {
     "never", "always", "don't", "dont", "do", "put", "run", "check",
 }
 
+# Korean person words. 너 needs a particle or a gap after it, or 너무
+# ("very") would count as talking to someone.
+KO_YOU_RE = re.compile(r"(?<![가-힣])(?:여러분|당신|너희|너(?=[는도를의가랑]|\s|$))")
+KO_ME_RE = re.compile(r"(?<![가-힣])(?:우리|저희|제가|내가|나는|저는|(?:나|내|저|제)(?![가-힣]))")
+
 DEALBREAKERS = [
-    (re.compile(r"(?i)^\s*(?:stop scrolling|don'?t scroll)"),
+    (re.compile(r"(?i)^\s*(?:stop scrolling|don'?t scroll|스크롤\s?(?:을\s?)?(?:멈|그만|내리지\s?마|넘기지\s?마)|잠깐만?요?[,!.]?\s?(?:스크롤|멈춰))"),
      "Opens with \"stop scrolling\". Asking for attention proves you have not earned it."),
-    (re.compile(r"(?i)\b(?:in (?:this|today'?s) (?:video|reel)|i'?m going to show you|i'?ll show you how)\b"),
+    (re.compile(r"(?i)\b(?:in (?:this|today'?s) (?:video|reel)|i'?m going to show you|i'?ll show you how)\b"
+                r"|(?<![가-힣])(?:이|이번|오늘)\s?(?:영상|릴스)\s?에서|(?:보여|알려|소개해)\s?드릴(?:게요|께요)"),
      "Video preamble. Delete it and open on the payoff."),
-    (re.compile(r"(?i)^\s*(?:hey |hi |what'?s up |welcome )"),
+    (re.compile(r"(?i)^\s*(?:hey |hi |what'?s up |welcome |안녕|여러분[,!]?\s?안녕|반가워|반갑습니다)"),
      "Greeting. Nobody came to the feed to be greeted."),
     (HASHTAG_RE,
      "Hashtag in the hook. Hashtags belong at the bottom of the caption, if anywhere."),
@@ -151,9 +169,9 @@ def check_specificity(text):
 def check_stakes(text):
     """Tension, cost, negation. Something the viewer might lose."""
     w = [x.lower().strip("'’") for x in words(text)]
-    hits = [x for x in w if x in STAKES]
+    hits = [x for x in w if x in STAKES] + KO_STAKES_RE.findall(text)
     markers = sorted(set(hits))
-    if re.search(r"\$\s?\d", text):
+    if re.search(r"\$\s?\d|₩\s?\d|\d\s?[만천억]?\s?원", text):
         markers.append("a price")
     n = len(markers)
     score = {0: 20.0, 1: 70.0}.get(n, 100.0)
@@ -178,7 +196,8 @@ def check_frontload(text):
     payload = None
     for i, token in enumerate(low):
         if (token in STAKES or token in SPOKEN_NUMBERS or token in MONEY_WORDS
-                or NUMBER_RE.match(w[i]) or (i and PROPER_RE.match(w[i]))):
+                or NUMBER_RE.match(w[i]) or (i and PROPER_RE.match(w[i]))
+                or KO_STAKES_RE.search(w[i])):
             payload = i
             break
     if payload is None:
@@ -201,11 +220,11 @@ def check_address(text):
     """Aimed at one viewer, or floating in the air."""
     low = text.lower()
     w = [x.lower().strip("'’") for x in words(text)]
-    if re.search(r"\b(you|your|you're|youre|yourself)\b", low):
+    if re.search(r"\b(you|your|you're|youre|yourself)\b", low) or KO_YOU_RE.search(text):
         return 100.0, "speaks to the viewer"
     if w and w[0] in IMPERATIVES:
         return 90.0, f"imperative opener (\"{w[0]}\")"
-    if re.search(r"\b(i|my|me|we|our)\b", low):
+    if re.search(r"\b(i|my|me|we|our)\b", low) or KO_ME_RE.search(text):
         return 70.0, "first person, no viewer named"
     return 35.0, "third person, nobody in the room"
 

@@ -38,6 +38,7 @@ LEX = os.path.join(HERE, "slop.json")
 
 URL_RE = re.compile(r"https?://\S+|www\.\S+|\S+@\S+\.\S+")
 SENT_RE = re.compile(r"[^.!?\n]+[.!?]*")
+HANGUL_RE = re.compile(r"[가-힣]")
 
 
 def load_lexicon(path=LEX):
@@ -133,8 +134,17 @@ def pass_lexical(text, lex):
                      key=lambda e: len(e["find"]), reverse=True)
     for entry in entries:
         find = entry["find"]
-        pattern = re.compile(r"\b" + re.escape(find).replace(r"\ ", r"\s+") + r"\b",
-                             re.IGNORECASE)
+        if not HANGUL_RE.search(find):
+            pattern = re.compile(r"\b" + re.escape(find).replace(r"\ ", r"\s+") + r"\b",
+                                 re.IGNORECASE)
+        else:
+            # Korean glues particles onto the end of a word (게임체인저를), so
+            # only the front edge needs to be clear and the particle stays on the
+            # replacement. A deletion has to end where the word ends, or the
+            # leftover ending (멈춰요 -> 요) is stranded in the sentence.
+            tail = r"(?![가-힣])" if not entry["replace"] else ""
+            pattern = re.compile(r"(?<![가-힣])" + re.escape(find).replace(r"\ ", r"\s*") + tail,
+                                 re.IGNORECASE)
         found = pattern.findall(text)
         if not found:
             continue

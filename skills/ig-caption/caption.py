@@ -35,22 +35,28 @@ HASHTAG_LIMIT = 5        # Instagram's cap per post or reel since 18 Dec 2025,
                          # rather than many generic ones, can improve both your
                          # content's performance and people's experience".
 
-HASHTAG_RE = re.compile(r"(?:^|\s)(#[A-Za-z0-9_]+)")
+HASHTAG_RE = re.compile(r"(?:^|\s)(#[A-Za-z0-9_가-힣ㄱ-ㆎ]+)")
 MENTION_RE = re.compile(r"(?:^|\s)(@[A-Za-z0-9_.]+)")
 LINK_RE = re.compile(r"https?://\S+|\bwww\.\S+|\b[a-z0-9-]+\.(?:com|co|io|net|org|ai|app)/\S*",
                      re.IGNORECASE)
 EMOJI_RE = re.compile(r"[\U0001F300-\U0001FAFF☀-➿←-⇿️]")
-CONCRETE_RE = re.compile(r"\$\s?\d|\b\d[\d,.]*\b|(?<!^)\b[A-Z][a-z]{2,}\b", re.MULTILINE)
+# Korean glues units and counters straight onto the number (27kg, 3가지, 5분),
+# so the word boundary the English pattern ends on never comes. These only
+# fire next to Hangul, which is what keeps English results where they were.
+KO_NUMBER = (r"(?<![\d.,])\d[\d,.]*(?=[A-Za-z%]{0,3}\s?[가-힣])"
+             r"|(?<=[가-힣])\d[\d,.]*|(?<=[가-힣]\s)\d[\d,.]*"
+             r"|(?<![가-힣])(?:두|세|다섯|여섯|일곱|여덟|아홉|열)\s?(?:가지|번|명|개|살|마리|달)")
+CONCRETE_RE = re.compile(r"\$\s?\d|" + KO_NUMBER + r"|\b\d[\d,.]*\b|(?<!^)\b[A-Z][a-z]{2,}\b", re.MULTILINE)
 
 ASKS = [
-    (re.compile(r"(?i)\bcomment (?:the word |\")?[A-Z0-9]{2,}\b"), "comment a keyword"),
-    (re.compile(r"(?i)\b(?:dm|message) me\b"), "DM me"),
-    (re.compile(r"(?i)\bsave (?:this|it)\b"), "save this"),
-    (re.compile(r"(?i)\bshare (?:this|it)\b"), "share this"),
-    (re.compile(r"(?i)\bfollow (?:me|for)\b"), "follow"),
-    (re.compile(r"(?i)\blink in (?:my )?bio\b"), "link in bio"),
-    (re.compile(r"(?i)\b(?:swipe|tap) (?:through|left|right|for|to)\b"), "swipe or tap"),
-    (re.compile(r"(?i)\btell me\b|\bwhat would you\b|\bwhich one\b"), "answer a question"),
+    (re.compile(r"(?i)\bcomment (?:the word |\")?[A-Z0-9]{2,}\b|댓글(?:에|로)?\s*(?:[\"\'“‘][^\"\'”’\n]{1,15}[\"\'”’]|[A-Za-z0-9가-힣]{1,15}?이?라고)"), "comment a keyword"),
+    (re.compile(r"(?i)\b(?:dm|message) me\b|(?:\bdm|디엠|메시지|메세지)\s?(?:주세요|주시면|보내\s?주세요|보내주시면|남겨\s?주세요)"), "DM me"),
+    (re.compile(r"(?i)\bsave (?:this|it)\b|저장\s?해\s?(?:두|놓)(?:세요|고|시면)|저장\s?(?:하세요|해\s?주세요|필수|각)"), "save this"),
+    (re.compile(r"(?i)\bshare (?:this|it)\b|공유\s?(?:해\s?주세요|하세요|해\s?보세요|부탁)"), "share this"),
+    (re.compile(r"(?i)\bfollow (?:me|for)\b|팔로우\s?(?:해\s?주세요|하세요|해\s?두세요|부탁|하고(?!\s?있))"), "follow"),
+    (re.compile(r"(?i)\blink in (?:my )?bio\b|프로필\s?(?:상단\s?|의\s?)?링크|링크는\s?프로필"), "link in bio"),
+    (re.compile(r"(?i)\b(?:swipe|tap) (?:through|left|right|for|to)\b|옆으로\s?(?:넘겨|밀어)|스와이프\s?해"), "swipe or tap"),
+    (re.compile(r"(?i)\btell me\b|\bwhat would you\b|\bwhich one\b|알려\s?주세요|댓글\s?(?:로|에)?\s?(?:남겨|달아|적어)\s?주세요|(?:어떤\s?(?:게|걸)|뭐가)\s?더[^.!?\n]{0,15}\?"), "answer a question"),
 ]
 
 FILLER_TAGS = {"#viral", "#fyp", "#explore", "#explorepage", "#foryou", "#foryoupage",

@@ -219,6 +219,20 @@ SWIPE FILE  ·  4 reels  ·  4 accounts  ·  baseline: account median
            "in this video I am going to show you my morning routine"
 ```
 
+### Korean
+
+The five tools read Korean too. `#애개육아` counts as a hashtag, `27kg` and
+`3가지` count as numbers, `댓글로 알려주세요` counts as the ask, and
+`안녕하세요` gets flagged as a greeting instead of quietly scoring low.
+`beats.py` times Korean by the syllable, at 300 a minute by default; time
+yourself and pass `--spm`. The humanizer has a short Korean block at the end
+of `slop.json` that matches with the particle still attached, so 게임체인저를
+comes out as 큰 변화를.
+
+What it cannot do: spot a name, because Hangul has no capital letters, or put
+a Korean hook into one of the 26 formulas. Those come back unclassified. The
+English results have not moved.
+
 ## What I actually measured, which is the part worth reading
 
 I did not want to publish a hook scorer on the claim that it feels right, so I
